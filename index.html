@@ -69,13 +69,6 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
   opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 3;
 }
 #swipe-hint.show { opacity: 1; }
-#promote-hint {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  font-size: 10px; letter-spacing: 0.14em; color: #B8B4AC; font-weight: 400;
-  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 30;
-}
-#promote-hint.show { opacity: 1; }
-
 /* トースト */
 #toast {
   position: absolute; bottom: 80px; left: 50%;
@@ -124,17 +117,6 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
   touch-action: none; overflow: hidden; will-change: transform;
 }
 #drawer.open { transform: translateY(var(--drawer-y, 45%)); }
-#drawer.promoted { background: #F7F6F3; }
-
-/* 昇格フェードアウト — transformを !important で固定してスライドを防ぐ */
-#drawer.promote-out {
-  animation: promoteOut 0.35s ease forwards !important;
-  transform: translateY(0%) !important;
-}
-@keyframes promoteOut {
-  from { opacity: 1; filter: blur(0px);  transform: translateY(0%); }
-  to   { opacity: 0; filter: blur(12px); transform: translateY(0%); }
-}
 
 #drawer-inner { flex: 1; display: flex; flex-direction: column; will-change: transform, opacity; }
 
@@ -147,7 +129,6 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
 #drawer-handle-area:active { cursor: grabbing; }
 #drawer-handle { width: 32px; height: 3px; background: #D8D4CE; border-radius: 2px; pointer-events: none; transition: background 0.2s, width 0.2s, opacity 0.3s; }
 #drawer-handle-area:hover #drawer-handle { background: #B0ADA6; width: 38px; }
-#drawer.promoted #drawer-handle { opacity: 0; }
 
 #drawer-header { padding: 0 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
 #drawer-date { font-size: 10px; letter-spacing: 0.16em; color: #B8B4AC; font-weight: 400; text-transform: uppercase; }
@@ -196,7 +177,6 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
     <div id="drawer-trigger"><div id="trigger-line"></div></div>
   </div>
   <div id="swipe-hint">下にスワイプで新しいメモ</div>
-  <div id="promote-hint">そのまま引っ張ると差し替え</div>
   <div id="editor-dim"></div>
   <div id="toast"><span>削除しました</span><span id="toast-undo">取り消す</span></div>
   <div id="deck-overlay">
@@ -250,7 +230,6 @@ var handleArea  = document.getElementById('drawer-handle-area');
 var triggerEl   = document.getElementById('drawer-trigger');
 var toastEl     = document.getElementById('toast');
 var swipeHint   = document.getElementById('swipe-hint');
-var promoteHint = document.getElementById('promote-hint');
 
 // ── ユーティリティ ───────────────────────────
 function getNote(id) { return notes.find(function(n) { return n.id === id; }); }
@@ -373,7 +352,7 @@ function closeDrawer() {
 }
 
 // ── ドロワードラッグ（rubber banding + 昇格） ──
-var dStartY = 0, dStartPct = 0, dragging = false, willPromote = false;
+var dStartY = 0, dStartPct = 0, dragging = false;
 
 function getDrawerPct() { return parseFloat(getComputedStyle(drawerEl).getPropertyValue('--drawer-y')) || 45; }
 
@@ -402,12 +381,7 @@ function onDragMove(e) {
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
   var pct = rubberBand(dStartPct + ((cy - dStartY) / window.innerHeight) * 100, 3, 90);
   drawerEl.style.setProperty('--drawer-y', pct + '%');
-  var promote = pct < 8;
-  if (promote !== willPromote) {
-    willPromote = promote;
-    drawerEl.classList.toggle('promoted', promote);
-    promoteHint.classList.toggle('show', promote);
-  }
+
 }
 
 function onDragEnd() {
@@ -416,9 +390,6 @@ function onDragEnd() {
   document.removeEventListener('mousemove', onDragMove); document.removeEventListener('mouseup', onDragEnd);
   document.removeEventListener('touchmove', onDragMove); document.removeEventListener('touchend', onDragEnd);
 
-  if (willPromote) {
-    promoteDrawer(); return;
-  }
   drawerEl.style.transition = 'transform 0.44s cubic-bezier(0.32,0.72,0,1)';
   var pct = getDrawerPct();
   if (pct > 72) { closeDrawer(); }
@@ -428,26 +399,25 @@ function onDragEnd() {
   }
 }
 
-// ── 昇格（差し替え） ─────────────────────────
+// ── 昇格（ダブルタップで差し替え） ─────────────
+var lastTapTime = 0;
+function handleDrawerTap() {
+  var now = Date.now();
+  if (now - lastTapTime < 300) {
+    // ダブルタップ — メインに差し替え
+    promoteDrawer();
+  }
+  lastTapTime = now;
+}
+
 function promoteDrawer() {
   var nid = drawerEl._nid; if (!nid) return;
   var note = getNote(nid); if (!note) return;
   saveDrawer(); autoSave(); pruneEmpty();
-
-  // フェードアウト
-  drawerEl.classList.add('promote-out');
-  editorDim.classList.remove('active');
-  promoteHint.classList.remove('show');
-
-  // フェード完了後にtextareaの値を差し替え
-  setTimeout(function() {
-    drawerEl.classList.remove('open', 'promoted', 'promote-out');
-    drawerEl.style.transition = '';
-    drawerEl._nid = null;
-    currentId = nid;
-    bodyEl.value = note.body;
-    updateIndicator();
-  }, 380);
+  currentId = nid;
+  bodyEl.value = note.body;
+  updateIndicator();
+  closeDrawer();
 }
 
 // ── 右スワイプ削除 ───────────────────────────
@@ -464,6 +434,10 @@ function resetSwipe() {
 }
 
 var swipeX = 0, swipeY = 0, swiping = false, swipeDir = null;
+drawerInner.addEventListener('touchend', function(e) {
+  // ダブルタップ判定（スワイプ中は除外）
+  if (!swiping && !swipeDir) handleDrawerTap();
+});
 drawerInner.addEventListener('touchstart', function(e) {
   swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY; swiping = false; swipeDir = null;
 }, { passive: true });
@@ -536,6 +510,8 @@ handleArea.addEventListener('touchstart', onDragStart, { passive: true });
 triggerEl.addEventListener('click', function() { if (deckOpen) closeDeck(); else openDeck(); });
 deckOverlay.addEventListener('click', function(e) { if (e.target === deckOverlay || e.target.id === 'deck-backdrop') closeDeck(); });
 editorDim.addEventListener('click', closeDrawer);
+// PC用ダブルクリックで差し替え
+document.getElementById('drawer-body-wrap').addEventListener('dblclick', promoteDrawer);
 
 bodyEl.addEventListener('input', function() { clearTimeout(inputTimer); inputTimer = setTimeout(autoSave, 600); });
 drawerBody.addEventListener('input', function() { clearTimeout(saveTimer); saveTimer = setTimeout(saveDrawer, 600); });
