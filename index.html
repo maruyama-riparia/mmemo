@@ -14,12 +14,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+/* iOSのtextarea描画バグ回避 — position:fixedをbodyに持たせる */
 html { height: 100%; overflow: hidden; }
 body {
   height: 100%; background: #F7F6F3;
   overscroll-behavior: none; -webkit-font-smoothing: antialiased;
   overflow: hidden;
-  /* iOSでposition:fixedの代わりにbodyを固定 */
   position: fixed; width: 100%; top: 0; left: 0;
 }
 
@@ -28,15 +29,12 @@ body {
   background: #F7F6F3;
   height: 100dvh;
   display: flex; flex-direction: column;
-  overflow: hidden;
-  /* fixedをappから外す */
-  position: relative;
+  overflow: hidden; position: relative;
   user-select: none;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ヘッダー */
 #header {
   position: relative; z-index: 2; flex-shrink: 0;
   padding: 48px 32px 0;
@@ -47,38 +45,42 @@ body {
 #note-indicator { font-size: 11px; letter-spacing: 0.1em; color: #C8C5BE; font-weight: 400; opacity: 0; transition: opacity 0.3s; }
 #note-indicator.show { opacity: 1; }
 
-/* エディタ */
-#editor-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
+/* drawerと同じ構造 */
+#editor-wrap { flex: 1; position: relative; overflow: hidden; will-change: transform; }
+#editor-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; height: 100%; }
 #body-input {
-  border: none; outline: none; box-shadow: none; background: transparent;
   font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
-  font-size: 17px; font-weight: 500; color: #4A4845;
-  width: 100%; resize: none; line-height: 2.0;
-  min-height: 100%; height: auto;
-  caret-color: #8C8A84; letter-spacing: 0.1em;
+  font-size: 17px; font-weight: 500; color: #4A4845; line-height: 2.0; letter-spacing: 0.1em;
+  border: none; outline: none; background: transparent;
+  width: 100%; resize: none; min-height: 100%; height: auto;
+  caret-color: #8C8A84;
   -webkit-appearance: none; appearance: none;
   user-select: text; -webkit-user-select: text;
-  padding: 28px 32px 48px;
-  display: block;
+  padding: 28px 32px 48px; display: block;
 }
 #body-input:focus { outline: none; box-shadow: none; border: none; }
 #body-input::placeholder { color: #C8C5BE; font-weight: 400; }
 
-/* ボトムバー */
 #bottom-bar { flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 #drawer-trigger { height: 72px; display: flex; align-items: center; justify-content: center; cursor: pointer; width: 100%; padding: 0 32px; }
 #trigger-line { width: 28px; height: 2.5px; background: #D8D4CE; border-radius: 2px; transition: background 0.25s, width 0.25s; }
 #drawer-trigger:hover #trigger-line { background: #B0ADA6; width: 36px; }
 #drawer-trigger.active #trigger-line { background: #B0ADA6; }
 
-/* ヒント */
 #swipe-hint {
   position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%);
   font-size: 10px; letter-spacing: 0.12em; color: #C8C5BE; font-weight: 400;
   opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 3;
 }
 #swipe-hint.show { opacity: 1; }
-/* トースト */
+
+#promote-hint {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 10px; letter-spacing: 0.14em; color: #B8B4AC; font-weight: 400;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 30;
+}
+#promote-hint.show { opacity: 1; }
+
 #toast {
   position: absolute; bottom: 80px; left: 50%;
   transform: translateX(-50%) translateY(10px);
@@ -91,7 +93,6 @@ body {
 #toast-undo { color: #C8C5BE; cursor: pointer; font-weight: 500; }
 #toast-undo:hover { color: #FAFAF8; }
 
-/* デッキオーバーレイ */
 #deck-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 #deck-overlay.active { pointer-events: all; }
 #deck-backdrop {
@@ -117,7 +118,6 @@ body {
 .card-text { font-size: 15px; font-weight: 500; color: #4A4845; letter-spacing: 0.07em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
 .card-text.empty { color: #C5C2BB; font-weight: 400; }
 
-/* ドロワー */
 #drawer {
   position: absolute; left: 0; right: 0; bottom: 0; height: calc(100% - 32px);
   background: #FAFAF8; transform: translateY(100%);
@@ -126,10 +126,18 @@ body {
   touch-action: none; overflow: hidden; will-change: transform;
 }
 #drawer.open { transform: translateY(var(--drawer-y, 45%)); }
+#drawer.promoted { background: #F7F6F3; }
+#drawer.promoted #drawer-handle { opacity: 0; }
+#drawer.promote-out {
+  animation: promoteOut 0.35s ease forwards !important;
+  transform: translateY(0%) !important;
+}
+@keyframes promoteOut {
+  from { opacity: 1; filter: blur(0px);  transform: translateY(0%); }
+  to   { opacity: 0; filter: blur(12px); transform: translateY(0%); }
+}
 
 #drawer-inner { flex: 1; display: flex; flex-direction: column; will-change: transform, opacity; }
-
-/* ハンドルエリア — 判定を広く */
 #drawer-handle-area {
   flex-shrink: 0; height: 44px;
   display: flex; align-items: center; justify-content: center;
@@ -141,8 +149,6 @@ body {
 
 #drawer-header { padding: 0 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
 #drawer-date { font-size: 10px; letter-spacing: 0.16em; color: #B8B4AC; font-weight: 400; text-transform: uppercase; }
-
-/* PC用削除ボタン */
 #drawer-delete { display: none; background: none; border: none; cursor: pointer; color: #CCC9C2; padding: 2px; transition: color 0.2s; line-height: 0; }
 #drawer-delete:hover { color: #8C8A84; }
 #drawer-delete svg { width: 14px; height: 14px; stroke-width: 1.5; }
@@ -159,14 +165,11 @@ body {
 }
 #drawer-body:focus { outline: none; }
 
-/* エディタ背景ディム */
 #editor-dim {
-  position: fixed; inset: 0; z-index: 15;
+  position: absolute; inset: 0; z-index: 15;
   background: rgba(200,196,190,0); pointer-events: none; transition: background 0.44s ease;
 }
 #editor-dim.active { background: rgba(200,196,190,0.04); pointer-events: all; }
-
-
 </style>
 </head>
 <body>
@@ -176,12 +179,15 @@ body {
     <span id="note-indicator"></span>
   </div>
   <div id="editor-wrap">
-    <textarea id="body-input" placeholder="書きはじめる..." spellcheck="false"></textarea>
+    <div id="editor-scroll">
+      <textarea id="body-input" placeholder="書きはじめる..." spellcheck="false"></textarea>
+    </div>
   </div>
   <div id="bottom-bar">
     <div id="drawer-trigger"><div id="trigger-line"></div></div>
   </div>
   <div id="swipe-hint">下にスワイプで新しいメモ</div>
+  <div id="promote-hint">そのまま引っ張ると差し替え</div>
   <div id="editor-dim"></div>
   <div id="toast"><span>削除しました</span><span id="toast-undo">取り消す</span></div>
   <div id="deck-overlay">
@@ -202,24 +208,19 @@ body {
   </div>
 </div>
 <script>
-// ── ストレージ ──────────────────────────────
 var STORE_KEY = 'mmemo_notes';
 function loadNotes() {
-  try {
-    var r = localStorage.getItem(STORE_KEY);
-    if (!r) return null;
+  try { var r = localStorage.getItem(STORE_KEY); if (!r) return null;
     return JSON.parse(r).map(function(n) { return Object.assign({}, n, { updatedAt: new Date(n.updatedAt) }); });
   } catch(e) { return null; }
 }
 function saveNotes() { try { localStorage.setItem(STORE_KEY, JSON.stringify(notes)); } catch(e) {} }
 
-// ── 状態 ────────────────────────────────────
 var notes = loadNotes() || [{ id: Date.now(), body: '', updatedAt: new Date() }];
 var currentId = notes[notes.length - 1].id;
 var deckOpen = false, deletedNote = null;
 var toastTimer = null, inputTimer = null, saveTimer = null;
 
-// ── DOM ─────────────────────────────────────
 var bodyEl      = document.getElementById('body-input');
 var dateEl      = document.getElementById('date-label');
 var noteInd     = document.getElementById('note-indicator');
@@ -235,91 +236,59 @@ var handleArea  = document.getElementById('drawer-handle-area');
 var triggerEl   = document.getElementById('drawer-trigger');
 var toastEl     = document.getElementById('toast');
 var swipeHint   = document.getElementById('swipe-hint');
+var promoteHint = document.getElementById('promote-hint');
 
-// ── ユーティリティ ───────────────────────────
 function getNote(id) { return notes.find(function(n) { return n.id === id; }); }
-
 function formatDate(d) {
-  var diff = Date.now() - d;
-  var mins = Math.floor(diff / 60000);
-  var hours = Math.floor(diff / 3600000);
-  if (mins < 1) return 'たった今';
-  if (mins < 60) return mins + '分前';
+  var diff = Date.now() - d, mins = Math.floor(diff/60000), hours = Math.floor(diff/3600000);
+  if (mins < 1) return 'たった今'; if (mins < 60) return mins + '分前';
   if (hours < 24) return hours + '時間前';
   var yd = new Date(); yd.setDate(yd.getDate() - 1);
   if (d.toDateString() === yd.toDateString()) return '昨日';
   return d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
 }
-
-function updateDate() {
-  dateEl.textContent = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
-}
-
+function updateDate() { dateEl.textContent = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }); }
 function updateIndicator() {
   var c = notes.filter(function(n) { return n.id !== currentId && n.body.trim(); }).length;
   if (c > 0) { noteInd.textContent = c + ' 件'; noteInd.classList.add('show'); }
   else { noteInd.classList.remove('show'); }
 }
-
 function autoSave() {
   var n = getNote(currentId); if (!n) return;
-  n.body = bodyEl.value; n.updatedAt = new Date();
-  saveNotes(); updateIndicator();
+  n.body = bodyEl.value; n.updatedAt = new Date(); saveNotes(); updateIndicator();
 }
-
 function saveDrawer() {
   if (!drawerEl._nid) return;
   var n = getNote(drawerEl._nid); if (!n) return;
   n.body = drawerBody.value; n.updatedAt = new Date(); saveNotes();
 }
-
 function pruneEmpty() {
-  notes = notes.filter(function(n) { return n.id === currentId || n.body.trim(); });
-  saveNotes();
+  notes = notes.filter(function(n) { return n.id === currentId || n.body.trim(); }); saveNotes();
 }
-
-// ── メモ切替 ─────────────────────────────────
-function switchNote(id, body) {
-  bodyEl.value = body;
-  currentId = id;
-  updateIndicator();
-}
-
 function newNote() {
   autoSave(); pruneEmpty();
-  var id = Date.now();
-  notes.push({ id: id, body: '', updatedAt: new Date() });
-  saveNotes();
-  switchNote(id, '');
+  var id = Date.now(); notes.push({ id: id, body: '', updatedAt: new Date() });
+  currentId = id; bodyEl.value = ''; saveNotes(); updateIndicator();
 }
 
-// ── デッキ ───────────────────────────────────
-var OPACITIES = [0.2, 0.5, 0.75, 1];
-var OFFSETS   = [-132, -88, -44, 0];
-
+// デッキ
+var OPACITIES = [0.2, 0.5, 0.75, 1], OFFSETS = [-132, -88, -44, 0];
 function openDeck() {
   autoSave();
   var past = notes.filter(function(n) { return n.id !== currentId && n.body.trim(); }).slice(-4).reverse();
   if (!past.length) return;
-  deckOpen = true; deckOverlay.classList.add('active'); triggerEl.classList.add('active');
-  cardsEl.innerHTML = '';
+  deckOpen = true; deckOverlay.classList.add('active'); triggerEl.classList.add('active'); cardsEl.innerHTML = '';
   past.forEach(function(note, i) {
-    var total = past.length;
-    var card = document.createElement('div'); card.className = 'peek-card';
+    var total = past.length, card = document.createElement('div'); card.className = 'peek-card';
     var preview = note.body.replace(/\n/g, ' ').trim().slice(0, 22);
     card.innerHTML = '<div class="card-date">' + formatDate(note.updatedAt) + '</div>'
       + '<div class="card-text' + (preview ? '' : ' empty') + '">' + (preview || '空のメモ') + '...</div>';
-    var oi = Math.max(0, OPACITIES.length - total + i);
-    var fi = Math.max(0, OFFSETS.length - total + i);
-    card.style.opacity = '0'; card.style.transform = 'translateY(100%)';
-    cardsEl.appendChild(card);
-    setTimeout((function(c, ty, op) { return function() {
-      c.style.transform = 'translateY(' + ty + 'px)'; c.style.opacity = op; c.classList.add('visible');
-    }; })(card, OFFSETS[fi], OPACITIES[oi]), i * 52);
+    var oi = Math.max(0, OPACITIES.length - total + i), fi = Math.max(0, OFFSETS.length - total + i);
+    card.style.opacity = '0'; card.style.transform = 'translateY(100%)'; cardsEl.appendChild(card);
+    setTimeout((function(c, ty, op) { return function() { c.style.transform = 'translateY(' + ty + 'px)'; c.style.opacity = op; c.classList.add('visible'); }; })(card, OFFSETS[fi], OPACITIES[oi]), i * 52);
     card.addEventListener('click', (function(n) { return function() { openDrawer(n); }; })(note));
   });
 }
-
 function closeDeck() {
   deckOpen = false; triggerEl.classList.remove('active');
   var cards = cardsEl.querySelectorAll('.peek-card');
@@ -327,118 +296,95 @@ function closeDeck() {
   setTimeout(function() { deckOverlay.classList.remove('active'); cardsEl.innerHTML = ''; }, 360);
 }
 
-// ── ドロワー ─────────────────────────────────
+// ドロワー
 function openDrawer(note) {
-  closeDeck();
-  drawerEl._nid = note.id;
-  drawerDate.textContent = formatDate(note.updatedAt);
-  drawerBody.value = note.body;
+  closeDeck(); drawerEl._nid = note.id;
+  drawerDate.textContent = formatDate(note.updatedAt); drawerBody.value = note.body;
   drawerEl.classList.remove('promoted', 'promote-out');
   drawerEl.style.setProperty('--drawer-y', '45%');
   editorDim.classList.add('active');
   requestAnimationFrame(function() { drawerEl.classList.add('open'); });
 }
-
 function closeDrawer() {
-  saveDrawer();
-  drawerEl.classList.remove('open', 'promoted', 'promote-out');
-  drawerEl._nid = null;
-  editorDim.classList.remove('active');
-  promoteHint.classList.remove('show');
-  drawerInner.style.cssText = '';
-  updateIndicator();
+  saveDrawer(); drawerEl.classList.remove('open', 'promoted', 'promote-out');
+  drawerEl._nid = null; editorDim.classList.remove('active');
+  promoteHint.classList.remove('show'); drawerInner.style.cssText = ''; updateIndicator();
 }
 
-// ── ドロワードラッグ（rubber banding + 昇格） ──
-var dStartY = 0, dStartPct = 0, dragging = false;
-
+// ドロワードラッグ
+var dStartY = 0, dStartPct = 0, dragging = false, willPromote = false;
 function getDrawerPct() { return parseFloat(getComputedStyle(drawerEl).getPropertyValue('--drawer-y')) || 45; }
-
 function rubberBand(v, min, max) {
   if (v >= min && v <= max) return v;
   var over = v < min ? min - v : v - max;
   return v < min ? min - over * (1 - Math.min(over / window.innerHeight, 1) * 0.6)
                  : max + over * (1 - Math.min(over / window.innerHeight, 1) * 0.6);
 }
-
 function onDragStart(e) {
   if (!drawerEl.classList.contains('open')) return;
   dragging = true; willPromote = false;
   dStartY = e.touches ? e.touches[0].clientY : e.clientY;
-  dStartPct = getDrawerPct();
-  drawerEl.style.transition = 'none';
-  document.addEventListener('mousemove', onDragMove);
-  document.addEventListener('mouseup', onDragEnd);
-  document.addEventListener('touchmove', onDragMove, { passive: false });
-  document.addEventListener('touchend', onDragEnd);
+  dStartPct = getDrawerPct(); drawerEl.style.transition = 'none';
+  document.addEventListener('mousemove', onDragMove); document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchmove', onDragMove, { passive: false }); document.addEventListener('touchend', onDragEnd);
 }
-
 function onDragMove(e) {
-  if (!dragging) return;
-  if (e.cancelable) e.preventDefault();
+  if (!dragging) return; if (e.cancelable) e.preventDefault();
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
   var pct = rubberBand(dStartPct + ((cy - dStartY) / window.innerHeight) * 100, 3, 90);
   drawerEl.style.setProperty('--drawer-y', pct + '%');
-
+  var promote = pct < 8;
+  if (promote !== willPromote) {
+    willPromote = promote;
+    drawerEl.classList.toggle('promoted', promote);
+    promoteHint.classList.toggle('show', promote);
+  }
 }
-
 function onDragEnd() {
-  if (!dragging) return;
-  dragging = false;
+  if (!dragging) return; dragging = false;
   document.removeEventListener('mousemove', onDragMove); document.removeEventListener('mouseup', onDragEnd);
   document.removeEventListener('touchmove', onDragMove); document.removeEventListener('touchend', onDragEnd);
-
+  if (willPromote) { promoteDrawer(); return; }
   drawerEl.style.transition = 'transform 0.44s cubic-bezier(0.32,0.72,0,1)';
   var pct = getDrawerPct();
   if (pct > 72) { closeDrawer(); }
-  else {
-    var snap = [12, 45, 65].reduce(function(a, b) { return Math.abs(a - pct) < Math.abs(b - pct) ? a : b; });
-    drawerEl.style.setProperty('--drawer-y', snap + '%');
-  }
+  else { var snap = [12, 45, 65].reduce(function(a, b) { return Math.abs(a - pct) < Math.abs(b - pct) ? a : b; }); drawerEl.style.setProperty('--drawer-y', snap + '%'); }
 }
 
-// ── 昇格（ダブルタップで差し替え） ─────────────
-var lastTapTime = 0;
-function handleDrawerTap() {
-  var now = Date.now();
-  if (now - lastTapTime < 300) {
-    // ダブルタップ — メインに差し替え
-    promoteDrawer();
-  }
-  lastTapTime = now;
-}
-
+// 昇格（スワイプアップ or ダブルタップ）
 function promoteDrawer() {
   var nid = drawerEl._nid; if (!nid) return;
   var note = getNote(nid); if (!note) return;
   saveDrawer(); autoSave(); pruneEmpty();
-  currentId = nid;
-  bodyEl.value = note.body;
-  updateIndicator();
-  closeDrawer();
+  drawerEl.classList.add('promote-out');
+  editorDim.classList.remove('active'); promoteHint.classList.remove('show');
+  setTimeout(function() {
+    drawerEl.classList.remove('open', 'promoted', 'promote-out');
+    drawerEl.style.transition = ''; drawerEl._nid = null;
+    currentId = nid; bodyEl.value = note.body; updateIndicator();
+  }, 380);
 }
 
-// ── 右スワイプ削除 ───────────────────────────
+var lastTapTime = 0;
+document.getElementById('drawer-body-wrap').addEventListener('touchend', function(e) {
+  if (swiping || swipeDir) return;
+  var now = Date.now();
+  if (now - lastTapTime < 300) { promoteDrawer(); }
+  lastTapTime = now;
+});
+document.getElementById('drawer-body-wrap').addEventListener('dblclick', promoteDrawer);
+
+// 右スワイプ削除
 function applySwipe(dx) {
-  if (dx > 0) {
-    drawerInner.style.transform = 'translateX(' + Math.min(dx * 0.85, 200) + 'px)';
-    drawerInner.style.opacity = Math.max(0.12, 1 - dx / 240);
-  }
+  if (dx > 0) { drawerInner.style.transform = 'translateX(' + Math.min(dx * 0.85, 200) + 'px)'; drawerInner.style.opacity = Math.max(0.12, 1 - dx / 240); }
 }
 function resetSwipe() {
   drawerInner.style.transition = 'transform 0.28s cubic-bezier(0.34,1.15,0.64,1), opacity 0.28s ease';
   drawerInner.style.transform = ''; drawerInner.style.opacity = '';
   setTimeout(function() { drawerInner.style.transition = ''; }, 280);
 }
-
 var swipeX = 0, swipeY = 0, swiping = false, swipeDir = null;
-drawerInner.addEventListener('touchend', function(e) {
-  // ダブルタップ判定（スワイプ中は除外）
-  if (!swiping && !swipeDir) handleDrawerTap();
-});
-drawerInner.addEventListener('touchstart', function(e) {
-  swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY; swiping = false; swipeDir = null;
-}, { passive: true });
+drawerInner.addEventListener('touchstart', function(e) { swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY; swiping = false; swipeDir = null; }, { passive: true });
 drawerInner.addEventListener('touchmove', function(e) {
   var dx = e.touches[0].clientX - swipeX, dy = e.touches[0].clientY - swipeY;
   if (!swipeDir) swipeDir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
@@ -449,7 +395,6 @@ drawerInner.addEventListener('touchend', function(e) {
   if (swiping && dx > 80) { deleteDrawerNote(); } else { resetSwipe(); }
   swiping = false; swipeDir = null;
 });
-
 var mSwipeX = 0, mSwiping = false;
 drawerInner.addEventListener('mousedown', function(e) {
   if (e.target === drawerBody || e.target.closest('#drawer-handle-area')) return;
@@ -462,66 +407,50 @@ function endMouseSwipe(e) {
   if (e.clientX - mSwipeX > 80) { deleteDrawerNote(); } else { resetSwipe(); }
   document.removeEventListener('mousemove', onMouseSwipe); document.removeEventListener('mouseup', endMouseSwipe);
 }
-
 function deleteDrawerNote() {
   var nid = drawerEl._nid; if (!nid) return;
   var idx = notes.findIndex(function(n) { return n.id === nid; }); if (idx === -1) return;
-  deletedNote = { note: notes[idx], idx: idx };
-  notes.splice(idx, 1); saveNotes(); closeDrawer();
+  deletedNote = { note: notes[idx], idx: idx }; notes.splice(idx, 1); saveNotes(); closeDrawer();
   toastEl.classList.add('show'); clearTimeout(toastTimer);
   toastTimer = setTimeout(function() { toastEl.classList.remove('show'); deletedNote = null; }, 4000);
 }
-
 document.getElementById('toast-undo').addEventListener('click', function() {
-  if (!deletedNote) return;
-  notes.splice(deletedNote.idx, 0, deletedNote.note);
-  saveNotes(); deletedNote = null; clearTimeout(toastTimer);
-  toastEl.classList.remove('show'); updateIndicator();
+  if (!deletedNote) return; notes.splice(deletedNote.idx, 0, deletedNote.note);
+  saveNotes(); deletedNote = null; clearTimeout(toastTimer); toastEl.classList.remove('show'); updateIndicator();
 });
 document.getElementById('drawer-delete').addEventListener('click', deleteDrawerNote);
 
-// ── 下スワイプで新規 ─────────────────────────
+// 下スワイプで新規
 var eStartY = 0, eSwiping = false;
 bodyEl.addEventListener('touchstart', function(e) { eStartY = e.touches[0].clientY; eSwiping = false; }, { passive: true });
 bodyEl.addEventListener('touchmove', function(e) {
-  if (e.touches[0].clientY - eStartY > 18 && editorWrap.scrollTop === 0) { eSwiping = true; swipeHint.classList.add('show'); }
+  if (e.touches[0].clientY - eStartY > 18 && document.getElementById('editor-scroll').scrollTop === 0) { eSwiping = true; swipeHint.classList.add('show'); }
 }, { passive: true });
 bodyEl.addEventListener('touchend', function(e) {
   swipeHint.classList.remove('show');
-  if (eSwiping && e.changedTouches[0].clientY - eStartY > 55 && editorWrap.scrollTop === 0) newNote();
+  if (eSwiping && e.changedTouches[0].clientY - eStartY > 55 && document.getElementById('editor-scroll').scrollTop === 0) newNote();
   eSwiping = false;
 });
-
-// マウスホイール（デスクトップ確認用）
 var wheelTimer = null;
 bodyEl.addEventListener('wheel', function(e) {
-  if (editorWrap.scrollTop === 0 && e.deltaY < -30) {
+  if (document.getElementById('editor-scroll').scrollTop === 0 && e.deltaY < -30) {
     swipeHint.classList.add('show'); clearTimeout(wheelTimer);
     wheelTimer = setTimeout(function() { swipeHint.classList.remove('show'); newNote(); }, 380);
   }
 }, { passive: true });
 
-// ── イベント登録 ─────────────────────────────
 handleArea.addEventListener('mousedown', onDragStart);
 handleArea.addEventListener('touchstart', onDragStart, { passive: true });
-
 triggerEl.addEventListener('click', function() { if (deckOpen) closeDeck(); else openDeck(); });
 deckOverlay.addEventListener('click', function(e) { if (e.target === deckOverlay || e.target.id === 'deck-backdrop') closeDeck(); });
 editorDim.addEventListener('click', closeDrawer);
-// PC用ダブルクリックで差し替え
-document.getElementById('drawer-body-wrap').addEventListener('dblclick', promoteDrawer);
-
 bodyEl.addEventListener('input', function() { clearTimeout(inputTimer); inputTimer = setTimeout(autoSave, 1000); });
 drawerBody.addEventListener('input', function() { clearTimeout(saveTimer); saveTimer = setTimeout(saveDrawer, 600); });
 
-// ── 初期化 ───────────────────────────────────
 updateDate();
-var initNote = getNote(currentId);
-if (initNote) bodyEl.value = initNote.body;
-updateIndicator();
-feather.replace();
+var initNote = getNote(currentId); if (initNote) bodyEl.value = initNote.body;
+updateIndicator(); feather.replace();
 
-// ── Service Worker ───────────────────────────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').then(function(reg) {
     reg.addEventListener('updatefound', function() {
