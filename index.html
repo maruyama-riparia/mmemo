@@ -168,11 +168,13 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
 
 #editor-wrap.note-out { animation: noteOut 0.26s cubic-bezier(0.4,0,0.6,1) forwards; }
 #drawer.promote-out {
-  animation: promoteOut 0.38s cubic-bezier(0.4,0,0.6,1) forwards;
+  animation: promoteOut 0.38s cubic-bezier(0.4,0,0.6,1) forwards !important;
+  /* transformを上書きして位置固定 */
+  transform: translateY(0%) !important;
 }
 @keyframes promoteOut {
-  from { opacity: 1; filter: blur(0px); }
-  to   { opacity: 0; filter: blur(12px); }
+  from { opacity: 1; filter: blur(0px); transform: translateY(0%); }
+  to   { opacity: 0; filter: blur(14px); transform: translateY(0%); }
 }
 #editor-wrap.note-in  { animation: noteIn  0.34s cubic-bezier(0.34,1.15,0.64,1) forwards; }
 @keyframes noteOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(32px); opacity: 0; } }
@@ -338,7 +340,7 @@ function promoteDrawer(){
   autoSave(); pruneEmpty();
   currentId=nid;
 
-  // ブラー＋フェードアウト
+  // transitionを切ってからblur+フェードアウト（位置はCSSで固定）
   drawerEl.style.transition='none';
   drawerEl.classList.add('promote-out');
   editorDim.classList.remove('active');
@@ -349,7 +351,7 @@ function promoteDrawer(){
   bodyEl.value=note.body;
   updateIndicator();
 
-  // アニメーション完了後にclassを外し、カーソルを末尾に
+  // アニメーション完了後にclassを外し、スタイルを全リセット
   setTimeout(function(){
     drawerEl.classList.remove('open','promoted','promote-out');
     drawerEl.style.transition='';
@@ -478,15 +480,14 @@ drawerBodyEl.addEventListener('input',function(){ clearTimeout(saveTimer); saveT
 bodyEl.addEventListener('focus',function(){ setTimeout(function(){ window.scrollTo(0,0); },100); });
 
 updateDate(); loadCurrentNote(); bodyEl.focus(); feather.replace();
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').then(reg => {
-    reg.addEventListener('updatefound', () => {
-      const newSW = reg.installing;
-      newSW.addEventListener('statechange', () => {
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          // 新バージョンあり → 自動リロード
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    reg.addEventListener('updatefound',function(){
+      var newSW=reg.installing;
+      newSW.addEventListener('statechange',function(){
+        if(newSW.state==='installed'&&navigator.serviceWorker.controller){
           newSW.postMessage('skipWaiting');
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
+          navigator.serviceWorker.addEventListener('controllerchange',function(){
             window.location.reload();
           });
         }
