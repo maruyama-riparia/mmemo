@@ -357,19 +357,12 @@ function promoteDrawer(){
     drawerEl.style.transition='';
     drawerEl._nid=null;
 
-    // iOSのSafari/PWAはフォーカスタイミングで描画が飛ぶため
-    // blur→値セット→再フォーカスの順で確実に反映させる
+    // フォーカス操作を一切やめる
+    // iOSではfocus/setSelectionRangeが描画を妨げるため
+    // 値だけセットしてあとはユーザーのタップに任せる
     bodyEl.blur();
-    setTimeout(function(){
-      var n=getNote(currentId);
-      if(n) bodyEl.value=n.body;
-      // 再描画を1フレーム待ってからフォーカス
-      requestAnimationFrame(function(){
-        bodyEl.focus();
-        var len=bodyEl.value.length;
-        try{ bodyEl.setSelectionRange(len,len); }catch(e){}
-      });
-    }, 100);
+    var n=getNote(currentId);
+    if(n) bodyEl.value=n.body;
   }, 380);
 }
 
