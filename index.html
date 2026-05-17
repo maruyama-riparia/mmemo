@@ -34,10 +34,9 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
   background: #F7F6F3;
 }
 #date-label { font-size: 11px; letter-spacing: 0.16em; color: #B8B4AC; text-transform: uppercase; font-weight: 400; transition: opacity 0.5s ease; }
-#date-label.writing { opacity: 0; }
+
 #note-indicator { font-size: 11px; letter-spacing: 0.1em; color: #C8C5BE; font-weight: 400; opacity: 0; transition: opacity 0.3s; }
 #note-indicator.show { opacity: 1; }
-#note-indicator.writing { opacity: 0 !important; }
 
 #editor-wrap { flex: 1; overflow: hidden; position: relative; }
 #editor-dim {
@@ -207,7 +206,7 @@ function saveNotes(){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(notes))
 
 var notes=loadNotes()||[{id:Date.now(),body:'',updatedAt:new Date()}];
 var currentId=notes[notes.length-1].id;
-var deckOpen=false,deletedNote=null,toastTimer=null,inputTimer=null,saveTimer=null,writingTimer=null;
+var deckOpen=false,deletedNote=null,toastTimer=null,inputTimer=null,saveTimer=null;
 
 var bodyEl=document.getElementById('body-input');
 var dateEl=document.getElementById('date-label');
@@ -241,12 +240,6 @@ function updateIndicator(){
 function loadCurrentNote(){ var n=getNote(currentId); if(n) setBody(n.body); updateIndicator(); }
 function autoSave(){ var n=getNote(currentId); if(!n) return; n.body=getBody(); n.updatedAt=new Date(); saveNotes(); updateIndicator(); }
 function saveDrawer(){ if(!drawerEl._nid) return; var n=getNote(drawerEl._nid); if(!n) return; n.body=drawerBodyEl.value; n.updatedAt=new Date(); saveNotes(); }
-
-function onWriting(){
-  clearTimeout(writingTimer);
-  dateEl.classList.add('writing'); noteInd.classList.add('writing');
-  writingTimer=setTimeout(function(){ dateEl.classList.remove('writing'); noteInd.classList.remove('writing'); },2200);
-}
 
 function pruneEmpty(){
   notes=notes.filter(function(n){ return n.id===currentId||n.body.trim(); });
@@ -319,8 +312,6 @@ function promoteDrawer(){
   saveDrawer(); autoSave(); pruneEmpty();
   currentId=nid;
 
-  clearTimeout(writingTimer);
-  dateEl.classList.remove('writing'); noteInd.classList.remove('writing');
 
   drawerEl.style.transition='none';
   drawerEl.classList.add('promote-out');
@@ -409,7 +400,7 @@ triggerEl.addEventListener('click',function(){ if(deckOpen) closeDeck(); else op
 deckOverlay.addEventListener('click',function(e){ if(e.target===deckOverlay||e.target.id==='deck-backdrop') closeDeck(); });
 editorDim.addEventListener('click',function(){ closeDrawer(); });
 
-bodyEl.addEventListener('input',function(){ onWriting(); clearTimeout(inputTimer); inputTimer=setTimeout(autoSave,600); });
+bodyEl.addEventListener('input',function(){ clearTimeout(inputTimer); inputTimer=setTimeout(autoSave,600); });
 drawerBodyEl.addEventListener('input',function(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDrawer,600); });
 
 updateDate(); loadCurrentNote(); feather.replace();
