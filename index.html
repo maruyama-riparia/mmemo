@@ -39,17 +39,17 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
 #note-indicator.show { opacity: 1; }
 
 /* エディタ */
-#editor-wrap { flex: 1; overflow: hidden; position: relative; }
+#editor-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
 #body-input {
   border: none; outline: none; box-shadow: none; background: transparent;
   font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
   font-size: 17px; font-weight: 500; color: #4A4845;
-  width: 100%; resize: none; line-height: 2.0; height: 100%;
+  width: 100%; resize: none; line-height: 2.0;
+  min-height: 100%; height: auto;
   caret-color: #8C8A84; letter-spacing: 0.1em;
   -webkit-appearance: none; appearance: none;
   user-select: text; -webkit-user-select: text;
-  padding: 28px 32px 24px;
-  overscroll-behavior: contain;
+  padding: 28px 32px 48px;
   display: block;
 }
 #body-input:focus { outline: none; box-shadow: none; border: none; }
@@ -486,18 +486,18 @@ document.getElementById('drawer-delete').addEventListener('click', deleteDrawerN
 var eStartY = 0, eSwiping = false;
 bodyEl.addEventListener('touchstart', function(e) { eStartY = e.touches[0].clientY; eSwiping = false; }, { passive: true });
 bodyEl.addEventListener('touchmove', function(e) {
-  if (e.touches[0].clientY - eStartY > 18 && bodyEl.scrollTop === 0) { eSwiping = true; swipeHint.classList.add('show'); }
+  if (e.touches[0].clientY - eStartY > 18 && editorWrap.scrollTop === 0) { eSwiping = true; swipeHint.classList.add('show'); }
 }, { passive: true });
 bodyEl.addEventListener('touchend', function(e) {
   swipeHint.classList.remove('show');
-  if (eSwiping && e.changedTouches[0].clientY - eStartY > 55 && bodyEl.scrollTop === 0) newNote();
+  if (eSwiping && e.changedTouches[0].clientY - eStartY > 55 && editorWrap.scrollTop === 0) newNote();
   eSwiping = false;
 });
 
 // マウスホイール（デスクトップ確認用）
 var wheelTimer = null;
 bodyEl.addEventListener('wheel', function(e) {
-  if (bodyEl.scrollTop === 0 && e.deltaY < -30) {
+  if (editorWrap.scrollTop === 0 && e.deltaY < -30) {
     swipeHint.classList.add('show'); clearTimeout(wheelTimer);
     wheelTimer = setTimeout(function() { swipeHint.classList.remove('show'); newNote(); }, 380);
   }
@@ -513,7 +513,7 @@ editorDim.addEventListener('click', closeDrawer);
 // PC用ダブルクリックで差し替え
 document.getElementById('drawer-body-wrap').addEventListener('dblclick', promoteDrawer);
 
-bodyEl.addEventListener('input', function() { clearTimeout(inputTimer); inputTimer = setTimeout(autoSave, 600); });
+bodyEl.addEventListener('input', function() { clearTimeout(inputTimer); inputTimer = setTimeout(autoSave, 1000); });
 drawerBody.addEventListener('input', function() { clearTimeout(saveTimer); saveTimer = setTimeout(saveDrawer, 600); });
 
 // ── 初期化 ───────────────────────────────────
