@@ -14,14 +14,23 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+html { height: 100%; overflow: hidden; }
+body {
+  height: 100%; background: #F7F6F3;
+  overscroll-behavior: none; -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  /* iOSでposition:fixedの代わりにbodyを固定 */
+  position: fixed; width: 100%; top: 0; left: 0;
+}
 
 #app {
   font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
   background: #F7F6F3;
   height: 100dvh;
   display: flex; flex-direction: column;
-  overflow: hidden; position: fixed; inset: 0;
+  overflow: hidden;
+  /* fixedをappから外す */
+  position: relative;
   user-select: none;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
