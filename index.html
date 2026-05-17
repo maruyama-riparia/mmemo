@@ -478,7 +478,22 @@ drawerBodyEl.addEventListener('input',function(){ clearTimeout(saveTimer); saveT
 bodyEl.addEventListener('focus',function(){ setTimeout(function(){ window.scrollTo(0,0); },100); });
 
 updateDate(); loadCurrentNote(); bodyEl.focus(); feather.replace();
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          // 新バージョンあり → 自動リロード
+          newSW.postMessage('skipWaiting');
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+          });
+        }
+      });
+    });
+  });
+}
 </script>
 </body>
 </html>
