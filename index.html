@@ -357,16 +357,17 @@ function promoteDrawer(){
     drawerEl.style.transition='';
     drawerEl._nid=null;
 
-    // 描画が落ち着いてからfocus & カーソル末尾
-    requestAnimationFrame(function(){
-      requestAnimationFrame(function(){
-        bodyEl.focus();
-        var len=bodyEl.value.length;
-        bodyEl.setSelectionRange(len,len);
-        bodyEl.scrollTop=bodyEl.scrollHeight;
-      });
-    });
-  }, 360);
+    // iOSは描画完了までに時間がかかるため150ms待ってから反映
+    setTimeout(function(){
+      // テキストを再セット（iOSで反映されていないケースの保険）
+      var n=getNote(currentId);
+      if(n) bodyEl.value=n.body;
+      bodyEl.focus();
+      var len=bodyEl.value.length;
+      try{ bodyEl.setSelectionRange(len,len); }catch(e){}
+      bodyEl.scrollTop=bodyEl.scrollHeight;
+    }, 150);
+  }, 380);
 }
 
 /* ドロワー ドラッグ（rubber banding + 昇格） */
