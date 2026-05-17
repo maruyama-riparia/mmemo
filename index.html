@@ -340,42 +340,37 @@ function promoteDrawer(){
   autoSave(); pruneEmpty();
   currentId=nid;
 
-  // transitionを切ってからblur+フェードアウト（位置はCSSで固定）
+  // writingフェードが残っていたらリセット
+  clearTimeout(writingTimer);
+  dateEl.classList.remove('writing');
+  noteInd.classList.remove('writing');
+
   drawerEl.style.transition='none';
   drawerEl.classList.add('promote-out');
   editorDim.classList.remove('active');
   promoteHint.classList.remove('show');
   drawerInner.style.transform=''; drawerInner.style.opacity='';
-
-  // テキストを先に差し替えておく
-  bodyEl.value=note.body;
   updateIndicator();
 
-  // アニメーション完了後にclassを外し、スタイルを全リセット
+  // アニメーション完了後、ドロワーを完全に非表示にしてから値をセット
   setTimeout(function(){
+    // まずDOMから隠す
     drawerEl.classList.remove('open','promoted','promote-out');
     drawerEl.style.transition='';
+    drawerEl.style.display='none';
     drawerEl._nid=null;
 
-    // textareaを再生成してDOMに差し込む（iOS Safari描画リセット）
-    bodyEl.blur();
-    var n=getNote(currentId);
-    var newBody=document.createElement('textarea');
-    newBody.id='body-input';
-    newBody.spellcheck=false;
-    newBody.placeholder='書きはじめる...';
-    newBody.value=n?n.body:'';
-    // 既存のtextareaと差し替え
-    bodyEl.parentNode.replaceChild(newBody,bodyEl);
-    bodyEl=newBody;
-    // 入力イベントを再登録
-    bodyEl.addEventListener('input',function(){ onWriting(); clearTimeout(inputTimer); inputTimer=setTimeout(autoSave,600); });
-    bodyEl.addEventListener('touchstart',function(e){ esy=e.touches[0].clientY; esw=false; },{passive:true});
-    bodyEl.addEventListener('touchmove',function(e){ var dy=e.touches[0].clientY-esy; if(dy>18&&bodyEl.scrollTop===0){ esw=true; swipeHint.classList.add('show'); } },{passive:true});
-    bodyEl.addEventListener('touchend',function(e){ var dy=e.changedTouches[0].clientY-esy; swipeHint.classList.remove('show'); if(esw&&dy>55&&bodyEl.scrollTop===0) newNote(); esw=false; });
-    bodyEl.addEventListener('wheel',function(e){ if(bodyEl.scrollTop===0&&e.deltaY<-30){ swipeHint.classList.add('show'); clearTimeout(wt); wt=setTimeout(function(){ swipeHint.classList.remove('show'); newNote(); },380); } },{passive:true});
-    bodyEl.addEventListener('focus',function(){ setTimeout(function(){ window.scrollTo(0,0); },100); });
-  }, 380);
+    // 次のフレームで値をセット（ドロワーが消えた後）
+    requestAnimationFrame(function(){
+      var n=getNote(currentId);
+      if(n) bodyEl.value=n.body;
+
+      // さらに次のフレームでdisplayを戻す
+      requestAnimationFrame(function(){
+        drawerEl.style.display='';
+      });
+    });
+  }, 400);
 }
 
 /* ドロワー ドラッグ（rubber banding + 昇格） */
