@@ -78,12 +78,6 @@ body {
   opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 3;
 }
 #swipe-hint.show { opacity: 1; }
-#promote-hint {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-  font-size: 10px; letter-spacing: 0.14em; color: #B8B4AC; font-weight: 400;
-  opacity: 0; transition: opacity 0.2s; pointer-events: none; white-space: nowrap; z-index: 30;
-}
-#promote-hint.show { opacity: 1; }
 /* トースト */
 #toast {
   position: absolute; bottom: 80px; left: 50%;
@@ -356,7 +350,7 @@ function closeDrawer() {
 }
 
 // ── ドロワードラッグ（rubber banding + 昇格） ──
-var dStartY = 0, dStartPct = 0, dragging = false, willPromote = false;
+var dStartY = 0, dStartPct = 0, dragging = false;
 
 function getDrawerPct() { return parseFloat(getComputedStyle(drawerEl).getPropertyValue('--drawer-y')) || 45; }
 
@@ -385,12 +379,6 @@ function onDragMove(e) {
   var cy = e.touches ? e.touches[0].clientY : e.clientY;
   var pct = rubberBand(dStartPct + ((cy - dStartY) / window.innerHeight) * 100, 3, 90);
   drawerEl.style.setProperty('--drawer-y', pct + '%');
-  var promote = pct < 8;
-  if (promote !== willPromote) {
-    willPromote = promote;
-    drawerEl.classList.toggle('promoted', promote);
-    if (typeof promoteHint !== 'undefined') promoteHint.classList.toggle('show', promote);
-  }
 
 }
 
@@ -400,7 +388,6 @@ function onDragEnd() {
   document.removeEventListener('mousemove', onDragMove); document.removeEventListener('mouseup', onDragEnd);
   document.removeEventListener('touchmove', onDragMove); document.removeEventListener('touchend', onDragEnd);
 
-  if (willPromote) { promoteDrawer(); return; }
   drawerEl.style.transition = 'transform 0.44s cubic-bezier(0.32,0.72,0,1)';
   var pct = getDrawerPct();
   if (pct > 72) { closeDrawer(); }
@@ -410,11 +397,14 @@ function onDragEnd() {
   }
 }
 
-// ── 昇格（スワイプアップ or ダブルタップで差し替え） ──
+// ── 昇格（ダブルタップで差し替え） ─────────────
 var lastTapTime = 0;
 function handleDrawerTap() {
   var now = Date.now();
-  if (now - lastTapTime < 300) { promoteDrawer(); }
+  if (now - lastTapTime < 300) {
+    // ダブルタップ — メインに差し替え
+    promoteDrawer();
+  }
   lastTapTime = now;
 }
 
@@ -422,19 +412,10 @@ function promoteDrawer() {
   var nid = drawerEl._nid; if (!nid) return;
   var note = getNote(nid); if (!note) return;
   saveDrawer(); autoSave(); pruneEmpty();
-
-  drawerEl.classList.add('promote-out');
-  editorDim.classList.remove('active');
-  if (typeof promoteHint !== 'undefined') promoteHint.classList.remove('show');
-
-  setTimeout(function() {
-    drawerEl.classList.remove('open', 'promoted', 'promote-out');
-    drawerEl.style.transition = '';
-    drawerEl._nid = null;
-    currentId = nid;
-    bodyEl.value = note.body;
-    updateIndicator();
-  }, 380);
+  currentId = nid;
+  bodyEl.value = note.body;
+  updateIndicator();
+  closeDrawer();
 }
 
 // ── 右スワイプ削除 ───────────────────────────
