@@ -357,16 +357,19 @@ function promoteDrawer(){
     drawerEl.style.transition='';
     drawerEl._nid=null;
 
-    // iOSは描画完了までに時間がかかるため150ms待ってから反映
+    // iOSのSafari/PWAはフォーカスタイミングで描画が飛ぶため
+    // blur→値セット→再フォーカスの順で確実に反映させる
+    bodyEl.blur();
     setTimeout(function(){
-      // テキストを再セット（iOSで反映されていないケースの保険）
       var n=getNote(currentId);
       if(n) bodyEl.value=n.body;
-      bodyEl.focus();
-      var len=bodyEl.value.length;
-      try{ bodyEl.setSelectionRange(len,len); }catch(e){}
-      bodyEl.scrollTop=bodyEl.scrollHeight;
-    }, 150);
+      // 再描画を1フレーム待ってからフォーカス
+      requestAnimationFrame(function(){
+        bodyEl.focus();
+        var len=bodyEl.value.length;
+        try{ bodyEl.setSelectionRange(len,len); }catch(e){}
+      });
+    }, 100);
   }, 380);
 }
 
