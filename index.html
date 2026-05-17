@@ -157,11 +157,7 @@ html, body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webk
 }
 #editor-dim.active { background: rgba(200,196,190,0.04); pointer-events: all; }
 
-/* メモ切替アニメーション */
-#editor-wrap.note-out { animation: noteOut 0.22s ease forwards; }
-#editor-wrap.note-in  { animation: noteIn  0.28s cubic-bezier(0.34,1.15,0.64,1) forwards; }
-@keyframes noteOut { to { opacity: 0; transform: translateY(24px); } }
-@keyframes noteIn  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
 </style>
 </head>
 <body>
@@ -275,16 +271,9 @@ function pruneEmpty() {
 
 // ── メモ切替 ─────────────────────────────────
 function switchNote(id, body) {
-  editorWrap.classList.remove('note-in', 'note-out');
-  editorWrap.classList.add('note-out');
-  setTimeout(function() {
-    bodyEl.value = body;
-    currentId = id;
-    updateIndicator();
-    editorWrap.classList.remove('note-out');
-    editorWrap.classList.add('note-in');
-    setTimeout(function() { editorWrap.classList.remove('note-in'); }, 280);
-  }, 220);
+  bodyEl.value = body;
+  currentId = id;
+  updateIndicator();
 }
 
 function newNote() {
