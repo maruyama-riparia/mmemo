@@ -169,7 +169,7 @@ body {
   position: absolute; inset: 0; z-index: 15;
   background: rgba(200,196,190,0); pointer-events: none; transition: background 0.44s ease;
 }
-#editor-dim.active { background: rgba(200,196,190,0.04); pointer-events: all; }
+#editor-dim.active { background: rgba(200,196,190,0.04); }
 </style>
 </head>
 <body>
@@ -443,7 +443,6 @@ handleArea.addEventListener('mousedown', onDragStart);
 handleArea.addEventListener('touchstart', onDragStart, { passive: true });
 triggerEl.addEventListener('click', function() { if (deckOpen) closeDeck(); else openDeck(); });
 deckOverlay.addEventListener('click', function(e) { if (e.target === deckOverlay || e.target.id === 'deck-backdrop') closeDeck(); });
-editorDim.addEventListener('click', closeDrawer);
 bodyEl.addEventListener('input', function() { clearTimeout(inputTimer); inputTimer = setTimeout(autoSave, 1000); });
 drawerBody.addEventListener('input', function() { clearTimeout(saveTimer); saveTimer = setTimeout(saveDrawer, 600); });
 
