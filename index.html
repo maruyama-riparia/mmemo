@@ -49,12 +49,12 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
 
 #editor-wrap { flex: 1; overflow: hidden; position: relative; }
 #editor-dim {
-  position: absolute; inset: 0; z-index: 1;
+  position: fixed; inset: 0; z-index: 15;
   background: rgba(200,196,190,0);
   pointer-events: none;
   transition: background 0.44s ease;
 }
-#editor-dim.active { background: rgba(200,196,190,0.18); pointer-events: all; }
+#editor-dim.active { background: rgba(200,196,190,0.04); pointer-events: all; }
 
 #body-input {
   border: none; outline: none; box-shadow: none; background: transparent;
@@ -136,10 +136,20 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
 }
 
 #drawer-inner { flex: 1; display: flex; flex-direction: column; will-change: transform, opacity; }
-#drawer-handle { width: 32px; height: 3px; background: #D8D4CE; border-radius: 2px; margin: 12px auto 0; cursor: grab; flex-shrink: 0; transition: background 0.2s, width 0.2s, opacity 0.3s; }
-#drawer-handle:hover { background: #B0ADA6; width: 38px; }
-#drawer-handle:active { cursor: grabbing; }
-#drawer.promoted #drawer-handle { opacity: 0; pointer-events: none; }
+/* ドロワー上部タッチ領域 — 見た目はそのままで判定を大きく */
+#drawer-handle-area {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+#drawer-handle-area:active { cursor: grabbing; }
+#drawer-handle { width: 32px; height: 3px; background: #D8D4CE; border-radius: 2px; transition: background 0.2s, width 0.2s, opacity 0.3s; pointer-events: none; }
+#drawer-handle-area:hover #drawer-handle { background: #B0ADA6; width: 38px; }
+#drawer.promoted #drawer-handle { opacity: 0; }
 
 #drawer-header { padding: 14px 32px 0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
 #drawer-date { font-size: 10px; letter-spacing: 0.16em; color: #B8B4AC; font-weight: 400; text-transform: uppercase; }
@@ -147,16 +157,23 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
 #drawer-delete:hover { color: #8C8A84; }
 #drawer-delete svg { width: 14px; height: 14px; stroke-width: 1.5; }
 @media (hover: hover) and (pointer: fine) { #drawer-delete { display: block; } }
-#drawer-body-wrap { flex: 1; padding: 20px 32px 32px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#drawer-body-wrap { flex: 1; padding: 20px 32px 48px; overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
 #drawer-body {
   font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
   font-size: 17px; font-weight: 500; color: #4A4845; line-height: 2.0; letter-spacing: 0.1em;
-  border: none; outline: none; background: transparent; width: 100%; resize: none; min-height: 120px;
+  border: none; outline: none; background: transparent; width: 100%; resize: none; min-height: 100%; height: auto;
   -webkit-appearance: none; appearance: none; user-select: text;
 }
 #drawer-body:focus { outline: none; }
 
 #editor-wrap.note-out { animation: noteOut 0.26s cubic-bezier(0.4,0,0.6,1) forwards; }
+#drawer.promote-out {
+  animation: promoteOut 0.38s cubic-bezier(0.4,0,0.6,1) forwards;
+}
+@keyframes promoteOut {
+  from { opacity: 1; filter: blur(0px); }
+  to   { opacity: 0; filter: blur(12px); }
+}
 #editor-wrap.note-in  { animation: noteIn  0.34s cubic-bezier(0.34,1.15,0.64,1) forwards; }
 @keyframes noteOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(32px); opacity: 0; } }
 @keyframes noteIn  { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -169,9 +186,9 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
     <span id="note-indicator"></span>
   </div>
   <div id="editor-wrap">
-    <div id="editor-dim"></div>
     <textarea id="body-input" placeholder="書きはじめる..." spellcheck="false"></textarea>
   </div>
+  <div id="editor-dim"></div>
   <div id="bottom-bar">
     <div id="drawer-trigger"><div id="trigger-line"></div></div>
   </div>
@@ -184,7 +201,7 @@ body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-fon
   </div>
   <div id="drawer">
     <div id="drawer-inner">
-      <div id="drawer-handle"></div>
+      <div id="drawer-handle-area"><div id="drawer-handle"></div></div>
       <div id="drawer-header">
         <div id="drawer-date"></div>
         <button id="drawer-delete" aria-label="削除"><i data-feather="trash-2"></i></button>
@@ -214,7 +231,6 @@ var drawerEl=document.getElementById('drawer');
 var drawerInner=document.getElementById('drawer-inner');
 var drawerDateEl=document.getElementById('drawer-date');
 var drawerBodyEl=document.getElementById('drawer-body');
-var drawerHandle=document.getElementById('drawer-handle');
 var triggerEl=document.getElementById('drawer-trigger');
 var toastEl=document.getElementById('toast');
 var swipeHint=document.getElementById('swipe-hint');
@@ -321,13 +337,34 @@ function promoteDrawer(){
   saveDrawer();
   autoSave(); pruneEmpty();
   currentId=nid;
-  drawerEl.classList.remove('open','promoted'); drawerEl._nid=null;
+
+  // ブラー＋フェードアウト
+  drawerEl.style.transition='none';
+  drawerEl.classList.add('promote-out');
   editorDim.classList.remove('active');
   promoteHint.classList.remove('show');
   drawerInner.style.transform=''; drawerInner.style.opacity='';
+
+  // テキストを先に差し替えておく
   bodyEl.value=note.body;
   updateIndicator();
-  bodyEl.focus();
+
+  // アニメーション完了後にclassを外し、カーソルを末尾に
+  setTimeout(function(){
+    drawerEl.classList.remove('open','promoted','promote-out');
+    drawerEl.style.transition='';
+    drawerEl._nid=null;
+
+    // 描画が落ち着いてからfocus & カーソル末尾
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        bodyEl.focus();
+        var len=bodyEl.value.length;
+        bodyEl.setSelectionRange(len,len);
+        bodyEl.scrollTop=bodyEl.scrollHeight;
+      });
+    });
+  }, 360);
 }
 
 /* ドロワー ドラッグ（rubber banding + 昇格） */
@@ -341,10 +378,13 @@ function rubberBand(val,min,max){
   return val<min?min-damped:max+damped;
 }
 
-drawerHandle.addEventListener('mousedown',startDrag);
-drawerHandle.addEventListener('touchstart',startDrag,{passive:true});
+document.getElementById('drawer-handle-area').addEventListener('mousedown',startDrag);
+document.getElementById('drawer-handle-area').addEventListener('touchstart',startDrag,{passive:true});
+
 
 function startDrag(e){
+  // ドロワーが開いていないときはヘッダーからのドラッグを無視
+  if(!drawerEl.classList.contains('open')) return;
   dD=true; promoted=false;
   dSY=e.touches?e.touches[0].clientY:e.clientY;
   dSDY=getDrawerY();
@@ -404,7 +444,7 @@ drawerInner.addEventListener('touchmove',function(e){ var dx=e.touches[0].client
 drawerInner.addEventListener('touchend',function(e){ var dx=e.changedTouches[0].clientX-tsx; if(tSw&&dx>80){ deleteDrawerNote(); }else{ resetSwipe(); } tSw=false; tDir=null; });
 
 var msx=0,mSw=false;
-drawerInner.addEventListener('mousedown',function(e){ if(e.target===drawerBodyEl||e.target===drawerHandle) return; msx=e.clientX; mSw=true; document.addEventListener('mousemove',onMS); document.addEventListener('mouseup',endMS); });
+drawerInner.addEventListener('mousedown',function(e){ if(e.target===drawerBodyEl||e.target.closest('#drawer-handle-area')) return; msx=e.clientX; mSw=true; document.addEventListener('mousemove',onMS); document.addEventListener('mouseup',endMS); });
 function onMS(e){ if(!mSw) return; applySwipe(e.clientX-msx); }
 function endMS(e){ if(!mSw) return; mSw=false; var dx=e.clientX-msx; if(dx>80){ deleteDrawerNote(); }else{ resetSwipe(); } document.removeEventListener('mousemove',onMS); document.removeEventListener('mouseup',endMS); }
 
