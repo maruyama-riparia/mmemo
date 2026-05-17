@@ -1,25 +1,500 @@
-const CACHE = 'm-memo-v6';
-const ASSETS = ['/', '/index.html', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="m.memo">
+<meta name="theme-color" content="#F7F6F3">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<title>m.memo</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body { height: 100%; background: #F7F6F3; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-  self.skipWaiting();
-});
+#app {
+  font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
+  background: #F7F6F3;
+  height: 100dvh;
+  display: flex; flex-direction: column;
+  overflow: hidden; position: fixed; inset: 0; user-select: none;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
-  self.clients.claim();
-});
+#header {
+  position: relative; z-index: 2;
+  padding: 48px 32px 0; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  background: #F7F6F3;
+}
+/* ヘッダーの中身だけフェード、レイアウトは保持 */
+#date-label {
+  font-size: 11px; letter-spacing: 0.16em; color: #B8B4AC;
+  text-transform: uppercase; font-weight: 400;
+  transition: opacity 0.5s ease;
+}
+#date-label.writing { opacity: 0; }
+#note-indicator {
+  font-size: 11px; letter-spacing: 0.1em; color: #C8C5BE;
+  font-weight: 400; opacity: 0; transition: opacity 0.3s;
+}
+#note-indicator.show { opacity: 1; }
+#note-indicator.writing { opacity: 0 !important; }
 
-self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
-  );
-});
+#editor-wrap { flex: 1; overflow: hidden; position: relative; }
+#editor-dim {
+  position: fixed; inset: 0; z-index: 15;
+  background: rgba(200,196,190,0);
+  pointer-events: none;
+  transition: background 0.44s ease;
+}
+#editor-dim.active { background: rgba(200,196,190,0.04); pointer-events: all; }
 
-// クライアントからskipWaitingメッセージを受け取ったら即座に更新
-self.addEventListener('message', e => {
-  if (e.data === 'skipWaiting') self.skipWaiting();
-});
+#body-input {
+  border: none; outline: none; box-shadow: none; background: transparent;
+  font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
+  font-size: 17px; font-weight: 500; color: #4A4845;
+  width: 100%; resize: none; line-height: 2.0; height: 100%;
+  caret-color: #8C8A84; letter-spacing: 0.1em;
+  -webkit-appearance: none; appearance: none; user-select: text;
+  padding: 28px 32px 24px; overscroll-behavior: contain;
+  position: relative; z-index: 0;
+}
+#body-input:focus { outline: none; box-shadow: none; border: none; }
+#body-input::placeholder { color: #C8C5BE; font-weight: 400; }
+
+#bottom-bar { padding: 0 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+#drawer-trigger { height: 72px; display: flex; align-items: center; justify-content: center; cursor: pointer; width: 100%; }
+#trigger-line { width: 28px; height: 2.5px; background: #D8D4CE; border-radius: 2px; transition: background 0.25s, width 0.25s, transform 0.25s; }
+#drawer-trigger:hover #trigger-line { background: #B0ADA6; width: 36px; }
+#drawer-trigger.active #trigger-line { background: #B0ADA6; transform: scaleX(0.7); }
+
+#swipe-hint { position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%); font-size: 10px; letter-spacing: 0.12em; color: #C8C5BE; font-weight: 400; opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 3; }
+#swipe-hint.show { opacity: 1; }
+
+/* 全画面引っ張りヒント */
+#promote-hint {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 10px; letter-spacing: 0.14em; color: #B8B4AC;
+  font-weight: 400; opacity: 0; transition: opacity 0.2s;
+  pointer-events: none; white-space: nowrap; z-index: 30;
+}
+#promote-hint.show { opacity: 1; }
+
+#toast {
+  position: absolute; bottom: 80px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: #4A4845; color: #F7F6F3; font-size: 12px; font-weight: 400; letter-spacing: 0.08em;
+  padding: 10px 18px; border-radius: 24px; white-space: nowrap; opacity: 0;
+  transition: opacity 0.22s cubic-bezier(0.34,1.26,0.64,1), transform 0.22s cubic-bezier(0.34,1.26,0.64,1);
+  z-index: 50; pointer-events: none; display: flex; gap: 14px; align-items: center;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: all; }
+#toast-undo { color: #C8C5BE; cursor: pointer; font-weight: 500; }
+#toast-undo:hover { color: #FAFAF8; }
+
+#deck-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+#deck-overlay.active { pointer-events: all; }
+#deck-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(247,246,243,0);
+  -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px);
+  transition: background 0.28s, backdrop-filter 0.28s, -webkit-backdrop-filter 0.28s;
+}
+#deck-overlay.active #deck-backdrop {
+  background: rgba(247,246,243,0.5);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+#cards-container { position: absolute; bottom: 72px; left: 0; right: 0; }
+
+.peek-card { position: absolute; bottom: 0; left: 32px; right: 32px; padding: 11px 0; cursor: pointer; transform: translateY(100%); transition: transform 0.42s cubic-bezier(0.34,1.15,0.64,1), opacity 0.42s ease; pointer-events: none; opacity: 0; }
+.peek-card.visible { pointer-events: all; }
+.peek-card:active { opacity: 0.5 !important; }
+.card-date { font-size: 10px; letter-spacing: 0.13em; color: #B8B4AC; font-weight: 400; text-transform: uppercase; margin-bottom: 3px; }
+.card-text { font-size: 15px; font-weight: 500; color: #4A4845; letter-spacing: 0.07em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+.card-text.empty { color: #C5C2BB; font-weight: 400; }
+
+/* ドロワー */
+#drawer {
+  position: absolute; left: 0; right: 0; bottom: 0; height: calc(100% - 32px);
+  background: #FAFAF8; transform: translateY(100%);
+  transition: transform 0.44s cubic-bezier(0.32,0.72,0,1);
+  z-index: 20; display: flex; flex-direction: column; touch-action: none; overflow: hidden; will-change: transform;
+}
+#drawer.open { transform: translateY(var(--drawer-y, 45%)); }
+
+/* 全画面化した時のスタイル */
+#drawer.promoted {
+  background: #F7F6F3;
+  transition: transform 0.44s cubic-bezier(0.32,0.72,0,1), background 0.3s ease;
+}
+
+#drawer-inner { flex: 1; display: flex; flex-direction: column; will-change: transform, opacity; }
+/* ドロワー上部タッチ領域 — 見た目はそのままで判定を大きく */
+#drawer-handle-area {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+#drawer-handle-area:active { cursor: grabbing; }
+#drawer-handle { width: 32px; height: 3px; background: #D8D4CE; border-radius: 2px; transition: background 0.2s, width 0.2s, opacity 0.3s; pointer-events: none; }
+#drawer-handle-area:hover #drawer-handle { background: #B0ADA6; width: 38px; }
+#drawer.promoted #drawer-handle { opacity: 0; }
+
+#drawer-header { padding: 14px 32px 0; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+#drawer-date { font-size: 10px; letter-spacing: 0.16em; color: #B8B4AC; font-weight: 400; text-transform: uppercase; }
+#drawer-delete { display: none; background: none; border: none; cursor: pointer; color: #CCC9C2; padding: 2px; transition: color 0.2s; line-height: 0; }
+#drawer-delete:hover { color: #8C8A84; }
+#drawer-delete svg { width: 14px; height: 14px; stroke-width: 1.5; }
+@media (hover: hover) and (pointer: fine) { #drawer-delete { display: block; } }
+#drawer-body-wrap { flex: 1; padding: 20px 32px 48px; overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
+#drawer-body {
+  font-family: 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
+  font-size: 17px; font-weight: 500; color: #4A4845; line-height: 2.0; letter-spacing: 0.1em;
+  border: none; outline: none; background: transparent; width: 100%; resize: none; min-height: 100%; height: auto;
+  -webkit-appearance: none; appearance: none; user-select: text;
+}
+#drawer-body:focus { outline: none; }
+
+#editor-wrap.note-out { animation: noteOut 0.26s cubic-bezier(0.4,0,0.6,1) forwards; }
+#drawer.promote-out {
+  animation: promoteOut 0.38s cubic-bezier(0.4,0,0.6,1) forwards !important;
+  /* transformを上書きして位置固定 */
+  transform: translateY(0%) !important;
+}
+@keyframes promoteOut {
+  from { opacity: 1; filter: blur(0px); transform: translateY(0%); }
+  to   { opacity: 0; filter: blur(14px); transform: translateY(0%); }
+}
+#editor-wrap.note-in  { animation: noteIn  0.34s cubic-bezier(0.34,1.15,0.64,1) forwards; }
+@keyframes noteOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(32px); opacity: 0; } }
+@keyframes noteIn  { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <span id="date-label"></span>
+    <span id="note-indicator"></span>
+  </div>
+  <div id="editor-wrap">
+    <textarea id="body-input" placeholder="書きはじめる..." spellcheck="false"></textarea>
+  </div>
+  <div id="editor-dim"></div>
+  <div id="bottom-bar">
+    <div id="drawer-trigger"><div id="trigger-line"></div></div>
+  </div>
+  <div id="swipe-hint">下にスワイプで新しいメモ</div>
+  <div id="promote-hint">そのまま引っ張ると差し替え</div>
+  <div id="toast"><span>削除しました</span><span id="toast-undo">取り消す</span></div>
+  <div id="deck-overlay">
+    <div id="deck-backdrop"></div>
+    <div id="cards-container"></div>
+  </div>
+  <div id="drawer">
+    <div id="drawer-inner">
+      <div id="drawer-handle-area"><div id="drawer-handle"></div></div>
+      <div id="drawer-header">
+        <div id="drawer-date"></div>
+        <button id="drawer-delete" aria-label="削除"><i data-feather="trash-2"></i></button>
+      </div>
+      <div id="drawer-body-wrap">
+        <textarea id="drawer-body" spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+var STORE_KEY='mmemo_notes';
+function loadNotes(){ try{ var r=localStorage.getItem(STORE_KEY); if(!r) return null; return JSON.parse(r).map(function(n){ return Object.assign({},n,{updatedAt:new Date(n.updatedAt)}); }); }catch(e){ return null; } }
+function saveNotes(){ try{ localStorage.setItem(STORE_KEY,JSON.stringify(notes)); }catch(e){} }
+
+var notes=loadNotes()||[{id:Date.now(),body:'',updatedAt:new Date()}];
+var currentId=notes[notes.length-1].id;
+var deckOpen=false,deletedNote=null,toastTimer=null,inputTimer=null,saveTimer=null,writingTimer=null;
+
+var bodyEl=document.getElementById('body-input');
+var dateEl=document.getElementById('date-label');
+var noteInd=document.getElementById('note-indicator');
+var editorDim=document.getElementById('editor-dim');
+var deckOverlay=document.getElementById('deck-overlay');
+var cardsContainer=document.getElementById('cards-container');
+var drawerEl=document.getElementById('drawer');
+var drawerInner=document.getElementById('drawer-inner');
+var drawerDateEl=document.getElementById('drawer-date');
+var drawerBodyEl=document.getElementById('drawer-body');
+var triggerEl=document.getElementById('drawer-trigger');
+var toastEl=document.getElementById('toast');
+var swipeHint=document.getElementById('swipe-hint');
+var promoteHint=document.getElementById('promote-hint');
+var editorWrap=document.getElementById('editor-wrap');
+
+function getNote(id){ return notes.find(function(n){ return n.id===id; }); }
+function formatDate(d){ var diff=Date.now()-d,mins=Math.floor(diff/60000),hours=Math.floor(diff/3600000); if(mins<1) return 'たった今'; if(mins<60) return mins+'分前'; if(hours<24) return hours+'時間前'; var yd=new Date(); yd.setDate(yd.getDate()-1); if(d.toDateString()===yd.toDateString()) return '昨日'; return d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'}); }
+function updateDate(){ dateEl.textContent=new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'}); }
+function updateIndicator(){
+  var c=notes.filter(function(n){ return n.id!==currentId&&n.body.trim(); }).length;
+  if(c>0){ noteInd.textContent=c+' 件'; noteInd.classList.add('show'); }else{ noteInd.classList.remove('show'); }
+}
+function loadCurrentNote(){ var n=getNote(currentId); if(n) bodyEl.value=n.body; updateIndicator(); }
+function autoSave(){ var n=getNote(currentId); if(!n) return; n.body=bodyEl.value; n.updatedAt=new Date(); saveNotes(); updateIndicator(); }
+function saveDrawer(){ if(!drawerEl._nid) return; var n=getNote(drawerEl._nid); if(!n) return; n.body=drawerBodyEl.value; n.updatedAt=new Date(); saveNotes(); }
+
+/* 書き始めで日付だけフェード（入力欄はそのまま） */
+function onWriting(){
+  clearTimeout(writingTimer);
+  dateEl.classList.add('writing');
+  noteInd.classList.add('writing');
+  writingTimer=setTimeout(function(){
+    dateEl.classList.remove('writing');
+    noteInd.classList.remove('writing');
+  }, 2200);
+}
+
+function pruneEmpty(){
+  notes=notes.filter(function(n){ return n.id===currentId||n.body.trim(); });
+  saveNotes();
+}
+
+function animateSwitch(fn){
+  editorWrap.classList.add('note-out');
+  setTimeout(function(){
+    fn();
+    editorWrap.classList.remove('note-out');
+    editorWrap.classList.add('note-in');
+    setTimeout(function(){ editorWrap.classList.remove('note-in'); },340);
+  },240);
+}
+
+function newNote(){
+  autoSave(); pruneEmpty();
+  var id=Date.now();
+  notes.push({id:id,body:'',updatedAt:new Date()});
+  currentId=id; saveNotes();
+  animateSwitch(function(){ bodyEl.value=''; updateIndicator(); bodyEl.focus(); });
+}
+
+/* デッキ */
+var cardOpacities=[0.2,0.5,0.75,1], cardOffsets=[-132,-88,-44,0];
+function openDeck(){
+  autoSave();
+  var past=notes.filter(function(n){ return n.id!==currentId&&n.body.trim(); }).slice(-4).reverse();
+  if(!past.length) return;
+  deckOpen=true; deckOverlay.classList.add('active'); triggerEl.classList.add('active'); cardsContainer.innerHTML='';
+  past.forEach(function(note,i){
+    var total=past.length, card=document.createElement('div'); card.className='peek-card';
+    var preview=note.body.replace(/\n/g,' ').trim().slice(0,22);
+    card.innerHTML='<div class="card-date">'+formatDate(note.updatedAt)+'</div><div class="card-text'+(preview?'':' empty')+'">'+(preview||'空のメモ')+'...</div>';
+    var oi=Math.max(0,cardOpacities.length-total+i), fi=Math.max(0,cardOffsets.length-total+i);
+    var ty=cardOffsets[fi];
+    card.style.opacity='0'; card.style.transform='translateY(100%)'; cardsContainer.appendChild(card);
+    setTimeout((function(c,t,op){ return function(){ c.style.transform='translateY('+t+'px)'; c.style.opacity=op; c.classList.add('visible'); }; })(card,ty,cardOpacities[oi]),i*52);
+    card.addEventListener('click',(function(n){ return function(){ openDrawer(n); }; })(note));
+  });
+}
+
+function closeDeck(){
+  deckOpen=false; triggerEl.classList.remove('active');
+  var cards=cardsContainer.querySelectorAll('.peek-card');
+  cards.forEach(function(c,i){ setTimeout(function(){ c.style.transform='translateY(100%)'; c.style.opacity='0'; },i*28); });
+  setTimeout(function(){ deckOverlay.classList.remove('active'); cardsContainer.innerHTML=''; },360);
+}
+
+/* ドロワー — タップで開く */
+function openDrawer(note){
+  closeDeck();
+  drawerEl._nid=note.id;
+  drawerDateEl.textContent=formatDate(note.updatedAt);
+  drawerBodyEl.value=note.body;
+  drawerEl.classList.remove('promoted');
+  drawerEl.style.setProperty('--drawer-y','45%');
+  editorDim.classList.add('active');
+  requestAnimationFrame(function(){ drawerEl.classList.add('open'); });
+}
+
+function closeDrawer(){
+  saveDrawer(); drawerEl.classList.remove('open','promoted'); drawerEl._nid=null;
+  editorDim.classList.remove('active');
+  promoteHint.classList.remove('show');
+  drawerInner.style.transition='transform 0.22s ease,opacity 0.22s ease';
+  drawerInner.style.transform=''; drawerInner.style.opacity='';
+  setTimeout(function(){ drawerInner.style.transition=''; },440);
+  updateIndicator();
+}
+
+/* ドロワーを上まで引っ張ったらメインに昇格 */
+function promoteDrawer(){
+  var nid=drawerEl._nid; if(!nid) return;
+  var note=getNote(nid); if(!note) return;
+  saveDrawer();
+  autoSave(); pruneEmpty();
+  currentId=nid;
+
+  // transitionを切ってからblur+フェードアウト（位置はCSSで固定）
+  drawerEl.style.transition='none';
+  drawerEl.classList.add('promote-out');
+  editorDim.classList.remove('active');
+  promoteHint.classList.remove('show');
+  drawerInner.style.transform=''; drawerInner.style.opacity='';
+
+  // テキストを先に差し替えておく
+  bodyEl.value=note.body;
+  updateIndicator();
+
+  // アニメーション完了後にclassを外し、スタイルを全リセット
+  setTimeout(function(){
+    drawerEl.classList.remove('open','promoted','promote-out');
+    drawerEl.style.transition='';
+    drawerEl._nid=null;
+
+    // 描画が落ち着いてからfocus & カーソル末尾
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        bodyEl.focus();
+        var len=bodyEl.value.length;
+        bodyEl.setSelectionRange(len,len);
+        bodyEl.scrollTop=bodyEl.scrollHeight;
+      });
+    });
+  }, 360);
+}
+
+/* ドロワー ドラッグ（rubber banding + 昇格） */
+var dSY=0,dSDY=0,dD=false,promoted=false;
+function getDrawerY(){ return parseFloat(getComputedStyle(drawerEl).getPropertyValue('--drawer-y'))||45; }
+
+function rubberBand(val,min,max){
+  if(val>=min&&val<=max) return val;
+  var over=val<min?min-val:val-max;
+  var damped=over*(1-Math.min(over/window.innerHeight,1)*0.6);
+  return val<min?min-damped:max+damped;
+}
+
+document.getElementById('drawer-handle-area').addEventListener('mousedown',startDrag);
+document.getElementById('drawer-handle-area').addEventListener('touchstart',startDrag,{passive:true});
+
+
+function startDrag(e){
+  // ドロワーが開いていないときはヘッダーからのドラッグを無視
+  if(!drawerEl.classList.contains('open')) return;
+  dD=true; promoted=false;
+  dSY=e.touches?e.touches[0].clientY:e.clientY;
+  dSDY=getDrawerY();
+  drawerEl.style.transition='none';
+  document.addEventListener('mousemove',onDrag);
+  document.addEventListener('mouseup',endDrag);
+  document.addEventListener('touchmove',onDrag,{passive:false});
+  document.addEventListener('touchend',endDrag);
+}
+
+function onDrag(e){
+  if(!dD) return; if(e.cancelable) e.preventDefault();
+  var cy=e.touches?e.touches[0].clientY:e.clientY;
+  var raw=dSDY+((cy-dSY)/window.innerHeight)*100;
+  var rb=rubberBand(raw,3,90);
+  drawerEl.style.setProperty('--drawer-y',rb+'%');
+
+  // 上部に近づいたらヒント + 昇格クラス
+  if(rb<8){
+    drawerEl.classList.add('promoted');
+    promoteHint.classList.add('show');
+    promoted=true;
+  } else {
+    drawerEl.classList.remove('promoted');
+    promoteHint.classList.remove('show');
+    promoted=false;
+  }
+}
+
+function endDrag(){
+  if(!dD) return; dD=false;
+  document.removeEventListener('mousemove',onDrag); document.removeEventListener('mouseup',endDrag);
+  document.removeEventListener('touchmove',onDrag); document.removeEventListener('touchend',endDrag);
+
+  if(promoted){
+    // 全画面まで引っ張った → 差し替え
+    promoteDrawer();
+    return;
+  }
+
+  drawerEl.style.transition='transform 0.44s cubic-bezier(0.32,0.72,0,1)';
+  var cy=getDrawerY();
+  if(cy>72){ closeDrawer(); }
+  else{
+    var s=[12,45,65].reduce(function(a,b){ return Math.abs(a-cy)<Math.abs(b-cy)?a:b; });
+    drawerEl.style.setProperty('--drawer-y',s+'%');
+  }
+}
+
+/* 右スワイプ削除 */
+function applySwipe(dx){ if(dx>0){ drawerInner.style.transform='translateX('+Math.min(dx*0.85,200)+'px)'; drawerInner.style.opacity=Math.max(0.12,1-dx/240); } }
+function resetSwipe(){ drawerInner.style.transition='transform 0.28s cubic-bezier(0.34,1.15,0.64,1),opacity 0.28s ease'; drawerInner.style.transform=''; drawerInner.style.opacity=''; setTimeout(function(){ drawerInner.style.transition=''; },280); }
+
+var tsx=0,tsy=0,tSw=false,tDir=null;
+drawerInner.addEventListener('touchstart',function(e){ tsx=e.touches[0].clientX; tsy=e.touches[0].clientY; tSw=false; tDir=null; },{passive:true});
+drawerInner.addEventListener('touchmove',function(e){ var dx=e.touches[0].clientX-tsx,dy=e.touches[0].clientY-tsy; if(!tDir) tDir=Math.abs(dx)>Math.abs(dy)?'x':'y'; if(tDir==='x'&&dx>0){ tSw=true; applySwipe(dx); } },{passive:true});
+drawerInner.addEventListener('touchend',function(e){ var dx=e.changedTouches[0].clientX-tsx; if(tSw&&dx>80){ deleteDrawerNote(); }else{ resetSwipe(); } tSw=false; tDir=null; });
+
+var msx=0,mSw=false;
+drawerInner.addEventListener('mousedown',function(e){ if(e.target===drawerBodyEl||e.target.closest('#drawer-handle-area')) return; msx=e.clientX; mSw=true; document.addEventListener('mousemove',onMS); document.addEventListener('mouseup',endMS); });
+function onMS(e){ if(!mSw) return; applySwipe(e.clientX-msx); }
+function endMS(e){ if(!mSw) return; mSw=false; var dx=e.clientX-msx; if(dx>80){ deleteDrawerNote(); }else{ resetSwipe(); } document.removeEventListener('mousemove',onMS); document.removeEventListener('mouseup',endMS); }
+
+function deleteDrawerNote(){
+  var nid=drawerEl._nid; if(!nid) return;
+  var idx=notes.findIndex(function(n){ return n.id===nid; }); if(idx===-1) return;
+  deletedNote={note:notes[idx],idx:idx}; notes.splice(idx,1); saveNotes(); closeDrawer();
+  toastEl.classList.add('show'); clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ toastEl.classList.remove('show'); deletedNote=null; },4000);
+}
+
+document.getElementById('toast-undo').addEventListener('click',function(){ if(!deletedNote) return; notes.splice(deletedNote.idx,0,deletedNote.note); saveNotes(); deletedNote=null; clearTimeout(toastTimer); toastEl.classList.remove('show'); updateIndicator(); });
+document.getElementById('drawer-delete').addEventListener('click',deleteDrawerNote);
+
+/* 下スワイプで新規 */
+var esy=0,esw=false;
+bodyEl.addEventListener('touchstart',function(e){ esy=e.touches[0].clientY; esw=false; },{passive:true});
+bodyEl.addEventListener('touchmove',function(e){ var dy=e.touches[0].clientY-esy; if(dy>18&&bodyEl.scrollTop===0){ esw=true; swipeHint.classList.add('show'); } },{passive:true});
+bodyEl.addEventListener('touchend',function(e){ var dy=e.changedTouches[0].clientY-esy; swipeHint.classList.remove('show'); if(esw&&dy>55&&bodyEl.scrollTop===0) newNote(); esw=false; });
+
+var wt=null;
+bodyEl.addEventListener('wheel',function(e){ if(bodyEl.scrollTop===0&&e.deltaY<-30){ swipeHint.classList.add('show'); clearTimeout(wt); wt=setTimeout(function(){ swipeHint.classList.remove('show'); newNote(); },380); } },{passive:true});
+
+triggerEl.addEventListener('click',function(){ if(deckOpen) closeDeck(); else openDeck(); });
+deckOverlay.addEventListener('click',function(e){ if(e.target===deckOverlay||e.target.id==='deck-backdrop') closeDeck(); });
+editorDim.addEventListener('click',function(){ closeDrawer(); });
+
+/* 入力 */
+bodyEl.addEventListener('input',function(){ onWriting(); clearTimeout(inputTimer); inputTimer=setTimeout(autoSave,600); });
+drawerBodyEl.addEventListener('input',function(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveDrawer,600); });
+bodyEl.addEventListener('focus',function(){ setTimeout(function(){ window.scrollTo(0,0); },100); });
+
+updateDate(); loadCurrentNote(); bodyEl.focus(); feather.replace();
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    reg.addEventListener('updatefound',function(){
+      var newSW=reg.installing;
+      newSW.addEventListener('statechange',function(){
+        if(newSW.state==='installed'&&navigator.serviceWorker.controller){
+          newSW.postMessage('skipWaiting');
+          navigator.serviceWorker.addEventListener('controllerchange',function(){
+            window.location.reload();
+          });
+        }
+      });
+    });
+  });
+}
+</script>
+</body>
+</html>
